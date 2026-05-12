@@ -1,12 +1,19 @@
 using cAlgo.API;
-using cAlgo.API.Internals;
+using cAlgo.API.Indicators;
 using System;
+using System.Collections.Generic;
 
 namespace cAlgo.Robots
 {
     [Robot(TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
     public class LadderOrderBotUSD : Robot
     {
+        private enum InputType
+        {
+            DecimalPositive,
+            IntegerPositive
+        }
+
         private Button buyButton;
         private Button sellButton;
 
@@ -17,11 +24,90 @@ namespace cAlgo.Robots
         private TextBox differenceBox;
 
         private DateTime? lastOrderPlacementTime = null;
-        private const int CooldownMinutes = 15;
+        private const int CooldownMinutes = 1;
+
+        private ExponentialMovingAverage ema211;
+        private ExponentialMovingAverage ema53;
+        private ExponentialMovingAverage ema27;
+
+        private const int MaxEMABarsToDraw = 500; // Maximum number of recent bars to draw EMA lines for, to balance performance and historical visibility
 
         protected override void OnStart()
         {
+            ema211 = Indicators.ExponentialMovingAverage(Bars.ClosePrices, 211);
+            ema53 = Indicators.ExponentialMovingAverage(Bars.ClosePrices, 53);
+            ema27 = Indicators.ExponentialMovingAverage(Bars.ClosePrices, 27);
+
+            // Draw EMA lines immediately on startup if we have enough bars
+            if (Bars.ClosePrices.Count >= 212)
+            {
+                DrawEMALines();
+            }
+
             BuildUI();
+        }
+
+        protected override void OnBar()
+        {
+            // Redraw EMA lines on each new bar if we have enough bars
+            if (Bars.ClosePrices.Count >= 212)
+            {
+                DrawEMALines();
+            }
+        }
+
+        private void DrawEMALines()
+        {
+            // First, remove all existing EMA lines
+            ClearEMALines();
+
+            int startIndex = Math.Max(211, Bars.ClosePrices.Count - MaxEMABarsToDraw); // EMA211 requires at least 211 bars; limit to recent bars for performance
+            int endIndex = Bars.ClosePrices.Count - 1;
+
+            // Draw EMA211 as connected line segments
+            for (int i = startIndex + 1; i <= endIndex; i++)
+            {
+                if (!double.IsNaN(ema211.Result[i - 1]) && !double.IsNaN(ema211.Result[i]))
+                {
+                    var line = Chart.DrawTrendLine($"EMA211_{i}", i - 1, ema211.Result[i - 1], i, ema211.Result[i], Color.Red, 3, LineStyle.Solid);
+                }
+            }
+
+            // Draw EMA53 as connected line segments
+            for (int i = startIndex + 1; i <= endIndex; i++)
+            {
+                if (!double.IsNaN(ema53.Result[i - 1]) && !double.IsNaN(ema53.Result[i]))
+                {
+                    var line = Chart.DrawTrendLine($"EMA53_{i}", i - 1, ema53.Result[i - 1], i, ema53.Result[i], Color.Blue, 3, LineStyle.Solid);
+                }
+            }
+
+            // Draw EMA27 as connected line segments
+            for (int i = startIndex + 1; i <= endIndex; i++)
+            {
+                if (!double.IsNaN(ema27.Result[i - 1]) && !double.IsNaN(ema27.Result[i]))
+                {
+                    var line = Chart.DrawTrendLine($"EMA27_{i}", i - 1, ema27.Result[i - 1], i, ema27.Result[i], Color.Yellow, 3, LineStyle.Solid);
+                }
+            }
+        }
+
+        private void ClearEMALines()
+        {
+            var objectsToRemove = new List<string>();
+
+            foreach (var obj in Chart.Objects)
+            {
+                if (obj.Name.StartsWith("EMA211_") || obj.Name.StartsWith("EMA53_") || obj.Name.StartsWith("EMA27_"))
+                {
+                    objectsToRemove.Add(obj.Name);
+                }
+            }
+
+            foreach (var name in objectsToRemove)
+            {
+                Chart.RemoveObject(name);
+            }
         }
 
         private void BuildUI()
@@ -33,21 +119,21 @@ namespace cAlgo.Robots
             };
 
             volumeBox = CreateVolumeComboBox(mainPanel, "Volume (lots)", "0.01");
-            slUsdBox = CreateInput(mainPanel, "Stop Loss (USD)", "10.00");
-            tpUsdBox = CreateInput(mainPanel, "Take Profit (USD)", "2.00");
-            ordersBox = CreateInput(mainPanel, "Number of Orders", "1");
-            differenceBox = CreateInput(mainPanel, "Difference (Pips)", "10.0");
+            slUsdBox = CreateValidatedInput(mainPanel, "Stop Loss (USD)", "10.00", InputType.DecimalPositive);
+            tpUsdBox = CreateValidatedInput(mainPanel, "Take Profit (USD)", "2.00", InputType.DecimalPositive);
+            ordersBox = CreateValidatedInput(mainPanel, "Number of Orders", "1", InputType.IntegerPositive);
+            differenceBox = CreateValidatedInput(mainPanel, "Difference (Pips)", "10.0", InputType.DecimalPositive);
 
-            buyButton = new Button 
-            { 
-                Text = "BUY LADDER", 
+            buyButton = new Button
+            {
+                Text = "BUY LADDER",
                 BackgroundColor = Color.Green,
                 Margin = "0 5 0 0",
                 Height = 30
             };
-            sellButton = new Button 
-            { 
-                Text = "SELL LADDER", 
+            sellButton = new Button
+            {
+                Text = "SELL LADDER",
                 BackgroundColor = Color.Red,
                 Margin = "0 5 0 0",
                 Height = 30
@@ -84,41 +170,41 @@ namespace cAlgo.Robots
                 Margin = "0 5 0 0"
             };
 
-            inputPanel.AddChild(new TextBlock 
-            { 
+            inputPanel.AddChild(new TextBlock
+            {
                 Text = label,
                 FontSize = 11,
                 Margin = "0 0 0 2"
             });
-            
-            var comboBox = new ComboBox 
-            { 
+
+            var comboBox = new ComboBox
+            {
                 Height = 22
             };
-            
+
             // Add volume options from 0.01 to 1.00 in increments of 0.01
             for (double i = 0.01; i <= 1.00; i += 0.01)
             {
                 string optionText = $"{i:F2} Lots";
                 comboBox.AddItem(optionText);
             }
-            
+
             // Add larger volume options: 1.1, 1.2, ..., 10.0 in increments of 0.1
             for (double i = 1.1; i <= 10.0; i += 0.1)
             {
                 string optionText = $"{i:F1} Lots";
                 comboBox.AddItem(optionText);
             }
-            
+
             // Set default value
             comboBox.SelectedItem = $"{defaultValue} Lots";
-            
+
             inputPanel.AddChild(comboBox);
             panel.AddChild(inputPanel);
             return comboBox;
         }
 
-        private TextBox CreateInput(StackPanel panel, string label, string defaultValue)
+        private TextBox CreateValidatedInput(StackPanel panel, string label, string defaultValue, InputType inputType)
         {
             var inputPanel = new StackPanel
             {
@@ -126,22 +212,130 @@ namespace cAlgo.Robots
                 Margin = "0 5 0 0"
             };
 
-            inputPanel.AddChild(new TextBlock 
-            { 
+            inputPanel.AddChild(new TextBlock
+            {
                 Text = label,
                 FontSize = 11,
                 Margin = "0 0 0 2"
             });
-            
-            var box = new TextBox 
-            { 
+
+            var box = new TextBox
+            {
                 Text = defaultValue,
-                Height = 22
+                Height = 22,
+                BackgroundColor = Color.FromArgb(255, 240, 255, 240), // Light green for valid
+                ForegroundColor = Color.Black // Black text for contrast
             };
-            
+
+            // Add text changed validation
+            box.TextChanged += (args) => ValidateInput(box, inputType);
+
+            // Initial validation
+            ValidateInput(box, inputType);
+
             inputPanel.AddChild(box);
             panel.AddChild(inputPanel);
             return box;
+        }
+
+        private void ValidateInput(TextBox textBox, InputType inputType)
+        {
+            string originalText = textBox.Text;
+            string cleanedText = CleanInput(originalText, inputType);
+
+            // Update text if it was modified
+            if (cleanedText != originalText)
+            {
+                textBox.Text = cleanedText;
+                return; // TextChanged will be triggered again, so validation will run
+            }
+
+            string text = cleanedText.Trim();
+
+            bool isValid = false;
+
+            switch (inputType)
+            {
+                case InputType.DecimalPositive:
+                    if (textBox == slUsdBox)
+                    {
+                        isValid = double.TryParse(text, out double slValue) && slValue >= 0.1 && slValue <= 100.0;
+                    }
+                    else if (textBox == tpUsdBox)
+                    {
+                        isValid = double.TryParse(text, out double tpValue) && tpValue >= 0.1 && tpValue <= 50.0;
+                    }
+                    else if (textBox == differenceBox)
+                    {
+                        isValid = double.TryParse(text, out double diffValue) && diffValue >= 1.0 && diffValue <= 100.0;
+                    }
+                    else
+                    {
+                        isValid = double.TryParse(text, out double decimalValue) && decimalValue >= 0;
+                    }
+                    break;
+                case InputType.IntegerPositive:
+                    if (textBox == ordersBox)
+                    {
+                        isValid = int.TryParse(text, out int orderValue) && orderValue >= 1 && orderValue <= 20;
+                    }
+                    else
+                    {
+                        isValid = int.TryParse(text, out int intValue) && intValue >= 1;
+                    }
+                    break;
+            }
+
+            // Visual feedback
+            if (isValid)
+            {
+                textBox.BackgroundColor = Color.FromArgb(255, 240, 255, 240); // Light green
+                textBox.ForegroundColor = Color.Black; // Black text for contrast
+            }
+            else
+            {
+                textBox.BackgroundColor = Color.FromArgb(255, 255, 240, 240); // Light red
+                textBox.ForegroundColor = Color.Black; // Black text for contrast
+            }
+        }
+
+        private string CleanInput(string input, InputType inputType)
+        {
+            if (string.IsNullOrEmpty(input)) return input;
+
+            switch (inputType)
+            {
+                case InputType.DecimalPositive:
+                    // Allow digits, decimal point, and backspace
+                    var result = new System.Text.StringBuilder();
+                    bool hasDecimal = false;
+                    foreach (char c in input)
+                    {
+                        if (char.IsDigit(c))
+                        {
+                            result.Append(c);
+                        }
+                        else if (c == '.' && !hasDecimal)
+                        {
+                            result.Append(c);
+                            hasDecimal = true;
+                        }
+                    }
+                    return result.ToString();
+                case InputType.IntegerPositive:
+                    // Allow only digits
+                    var intResult = new System.Text.StringBuilder();
+                    foreach (char c in input)
+                    {
+                        if (char.IsDigit(c))
+                        {
+                            intResult.Append(c);
+                        }
+                    }
+                    return intResult.ToString();
+                default:
+                    return input;
+            }
         }
 
         private void PlaceLadderOrders(TradeType tradeType)
@@ -168,27 +362,27 @@ namespace cAlgo.Robots
                 return;
             }
             string volumeValue = volumeText.Replace(" Lots", "").Trim();
-            
+
             if (!double.TryParse(volumeValue, out double volumeLots) || volumeLots <= 0)
             {
                 Print("Invalid volume");
                 return;
             }
-            
+
             double volumeInUnits = Symbol.QuantityToVolumeInUnits(volumeLots);
-            
+
             // Ensure volume is within valid range
             if (volumeInUnits < (double)Symbol.VolumeInUnitsMin)
             {
                 volumeInUnits = (double)Symbol.VolumeInUnitsMin;
             }
-            
+
             if (volumeInUnits > (double)Symbol.VolumeInUnitsMax)
             {
                 Print("Volume too large");
                 return;
             }
-            
+
             Print($"Final volume: {volumeInUnits} units ({volumeLots} lots)");
 
 
@@ -218,8 +412,8 @@ namespace cAlgo.Robots
 
             // Risk Management: Check if total risk exceeds 30% of account balance
             double accountBalance = Account.Balance;
-            double maxRiskAmount = accountBalance * 0.30; // 30% of balance
-            
+            double maxRiskAmount = accountBalance * 0.50; // 30% of balance
+
             // Calculate existing risk from open positions
             double existingRisk = 0;
             foreach (var position in Positions)
@@ -236,7 +430,7 @@ namespace cAlgo.Robots
                     {
                         slDistancePips = (position.StopLoss.Value - position.EntryPrice) / Symbol.PipSize;
                     }
-                    
+
                     // Convert pips to money: risk = pips * pipValue * volume
                     if (slDistancePips > 0 && Symbol.PipValue > 0)
                     {
@@ -245,7 +439,7 @@ namespace cAlgo.Robots
                     }
                 }
             }
-            
+
             double availableRisk = maxRiskAmount - existingRisk;
             double totalRiskAmount = slUsd * orderCount; // Total risk across all orders
 
@@ -280,14 +474,20 @@ namespace cAlgo.Robots
 
             double slPips = MoneyToPips(slUsd, volumeInUnits);
             double tpPips = MoneyToPips(tpUsd, volumeInUnits);
-            double currentPrice = Symbol.Bid;
+
+            if (double.IsNaN(slPips) || double.IsNaN(tpPips))
+            {
+                Print("Error: Could not calculate stop loss or take profit pips due to invalid pip value");
+                return;
+            }
+            double currentPrice = tradeType == TradeType.Buy ? Symbol.Ask : Symbol.Bid;
 
             // Place limit orders with difference amount spacing
             int successfulOrders = 0;
             for (int i = 1; i <= orderCount; i++)
             {
                 double limitPrice = GetLimitPriceForOrder(currentPrice, differencePips, tradeType, i);
-                
+
                 var limitResult = PlaceLimitOrder(
                     tradeType,
                     SymbolName,
@@ -314,7 +514,7 @@ namespace cAlgo.Robots
                 double actualRiskPlaced = slUsd * successfulOrders;
                 Print($"Summary: {successfulOrders} out of {orderCount} orders placed successfully");
                 Print($"Total risk placed: ${actualRiskPlaced:F2} (${slUsd:F2} per order)");
-                
+
                 // Update cooldown timer
                 lastOrderPlacementTime = Server.Time;
                 Print($"Cooldown activated. Next orders can be placed after: {lastOrderPlacementTime.Value.AddMinutes(CooldownMinutes):HH:mm:ss}");
@@ -325,8 +525,8 @@ namespace cAlgo.Robots
         {
             if (volume == 0 || Symbol.PipValue == 0)
             {
-                Print("Error: Invalid volume or pip value");
-                return 0;
+                Print("Error: Invalid volume or pip value for MoneyToPips calculation");
+                return double.NaN; // Return NaN to indicate error
             }
             return money / (Symbol.PipValue * volume);
         }
