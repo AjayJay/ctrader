@@ -17,7 +17,7 @@ namespace cAlgo.Robots
         private TextBox tpUsdBox;
         private TextBox ordersBox;
 
-        private const int CooldownMinutes = 120;
+        private const int CooldownMinutes = 3;
         private DateTime lastUIUpdateTime = DateTime.MinValue;
 
         protected override void OnStart()
@@ -241,12 +241,16 @@ namespace cAlgo.Robots
 
             // Risk Management: Check if total risk exceeds 20% of account balance
             double accountBalance = Account.Balance;
-            double maxRiskAmount = accountBalance * 0.20; // 20% of balance
+            double maxRiskAmount = accountBalance * 0.03; // 20% of balance
             
             // Calculate existing risk from open positions
             double existingRisk = 0;
+            double unrealizedProfit = 0;
             foreach (var position in Positions)
             {
+                // Calculate unrealized PnL
+                unrealizedProfit += position.NetProfit;
+                
                 if (position.StopLoss.HasValue)
                 {
                     // Calculate stop loss distance in pips
@@ -269,20 +273,25 @@ namespace cAlgo.Robots
                 }
             }
             
-            double availableRisk = maxRiskAmount - existingRisk;
-            double totalRiskAmount = slUsd * orderCount; // Total risk across all orders
+            // Net risk considers unrealized profits - if positions are in profit, they offset risk
+            double netRisk = existingRisk - unrealizedProfit;
+            double availableRisk = maxRiskAmount - Math.Max(0, netRisk);
 
             Print($"Account Balance: ${accountBalance:F2}");
-            Print($"Maximum Risk Allowed (30%): ${maxRiskAmount:F2}");
-            if (existingRisk > 0)
+            Print($"Maximum Risk Allowed (20%): ${maxRiskAmount:F2}");
+            if (unrealizedProfit != 0)
             {
-                Print($"Existing Risk from Open Positions: ${existingRisk:F2}");
-                Print($"Available Risk Remaining: ${availableRisk:F2}");
+                Print($"Unrealized Profit: ${unrealizedProfit:F2}");
+                Print($"Gross Stop Loss Risk: ${existingRisk:F2}");
+                Print($"Net Risk (Gross Risk - Unrealized PnL): ${netRisk:F2}");
             }
-            else
+            else if (existingRisk > 0)
             {
-                Print($"Available Risk: ${availableRisk:F2}");
+                Print($"Gross Stop Loss Risk: ${existingRisk:F2}");
             }
+            
+            Print($"Available Risk Remaining: ${availableRisk:F2}");
+            double totalRiskAmount = slUsd * orderCount; // Total risk across all orders
             Print($"Total Risk Requested: ${totalRiskAmount:F2} ({orderCount} orders × ${slUsd:F2} SL)");
 
             if (availableRisk <= 0)

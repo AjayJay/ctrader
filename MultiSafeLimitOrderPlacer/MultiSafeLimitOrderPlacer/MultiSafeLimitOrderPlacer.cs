@@ -24,13 +24,17 @@ namespace cAlgo.Robots
         private TextBox differenceBox;
 
         private DateTime? lastOrderPlacementTime = null;
-        private const int CooldownMinutes = 1;
+        private const int CooldownMinutes = 3;
+        private const double riskPercent=0.50;
 
         private ExponentialMovingAverage ema211;
         private ExponentialMovingAverage ema53;
         private ExponentialMovingAverage ema27;
 
         private const int MaxEMABarsToDraw = 500; // Maximum number of recent bars to draw EMA lines for, to balance performance and historical visibility
+        private const string Ema211Prefix = "EMA211_";
+        private const string Ema53Prefix = "EMA53_";
+        private const string Ema27Prefix = "EMA27_";
 
         protected override void OnStart()
         {
@@ -58,47 +62,62 @@ namespace cAlgo.Robots
 
         private void DrawEMALines()
         {
-            // First, remove all existing EMA lines
-            ClearEMALines();
-
-            int startIndex = Math.Max(211, Bars.ClosePrices.Count - MaxEMABarsToDraw); // EMA211 requires at least 211 bars; limit to recent bars for performance
+            int startIndex = Math.Max(211, Bars.ClosePrices.Count - MaxEMABarsToDraw);
             int endIndex = Bars.ClosePrices.Count - 1;
+            var activeLineNames = new HashSet<string>();
 
-            // Draw EMA211 as connected line segments
-            for (int i = startIndex + 1; i <= endIndex; i++)
+            // For EMA211, first valid Result is at index 211
+            for (int i = Math.Max(startIndex, 212); i <= endIndex; i++)
             {
-                if (!double.IsNaN(ema211.Result[i - 1]) && !double.IsNaN(ema211.Result[i]))
-                {
-                    var line = Chart.DrawTrendLine($"EMA211_{i}", i - 1, ema211.Result[i - 1], i, ema211.Result[i], Color.Red, 3, LineStyle.Solid);
-                }
+                DrawEMASegment(Ema211Prefix, i, ema211, Color.Red, activeLineNames);
             }
 
-            // Draw EMA53 as connected line segments
-            for (int i = startIndex + 1; i <= endIndex; i++)
+            // For EMA53, first valid Result is at index 53
+            for (int i = Math.Max(startIndex, 54); i <= endIndex; i++)
             {
-                if (!double.IsNaN(ema53.Result[i - 1]) && !double.IsNaN(ema53.Result[i]))
-                {
-                    var line = Chart.DrawTrendLine($"EMA53_{i}", i - 1, ema53.Result[i - 1], i, ema53.Result[i], Color.Blue, 3, LineStyle.Solid);
-                }
+                DrawEMASegment(Ema53Prefix, i, ema53, Color.Blue, activeLineNames);
             }
 
-            // Draw EMA27 as connected line segments
-            for (int i = startIndex + 1; i <= endIndex; i++)
+            // For EMA27, first valid Result is at index 27
+            for (int i = Math.Max(startIndex, 28); i <= endIndex; i++)
             {
-                if (!double.IsNaN(ema27.Result[i - 1]) && !double.IsNaN(ema27.Result[i]))
-                {
-                    var line = Chart.DrawTrendLine($"EMA27_{i}", i - 1, ema27.Result[i - 1], i, ema27.Result[i], Color.Yellow, 3, LineStyle.Solid);
-                }
+                DrawEMASegment(Ema27Prefix, i, ema27, Color.Yellow, activeLineNames);
             }
+
+            ClearStaleEMALines(activeLineNames);
         }
 
-        private void ClearEMALines()
+        private void DrawEMASegment(string namePrefix, int barIndex, ExponentialMovingAverage ema, Color color, HashSet<string> activeLineNames)
+        {
+            double previousValue = ema.Result[barIndex - 1];
+            double currentValue = ema.Result[barIndex];
+
+            if (double.IsNaN(previousValue) || double.IsNaN(currentValue))
+            {
+                return;
+            }
+
+            string name = $"{namePrefix}{Bars.OpenTimes[barIndex]:yyyyMMddHHmmss}";
+            activeLineNames.Add(name);
+
+            Chart.DrawTrendLine(
+                name,
+                Bars.OpenTimes[barIndex - 1],
+                previousValue,
+                Bars.OpenTimes[barIndex],
+                currentValue,
+                color,
+                3,
+                LineStyle.Solid);
+        }
+
+        private void ClearStaleEMALines(HashSet<string> activeLineNames)
         {
             var objectsToRemove = new List<string>();
 
             foreach (var obj in Chart.Objects)
             {
-                if (obj.Name.StartsWith("EMA211_") || obj.Name.StartsWith("EMA53_") || obj.Name.StartsWith("EMA27_"))
+                if (IsEMALine(obj.Name) && !activeLineNames.Contains(obj.Name))
                 {
                     objectsToRemove.Add(obj.Name);
                 }
@@ -108,6 +127,29 @@ namespace cAlgo.Robots
             {
                 Chart.RemoveObject(name);
             }
+        }
+
+        private void ClearEMALines()
+        {
+            var objectsToRemove = new List<string>();
+
+            foreach (var obj in Chart.Objects)
+            {
+                if (IsEMALine(obj.Name))
+                {
+                    objectsToRemove.Add(obj.Name);
+                }
+            }
+
+            foreach (var name in objectsToRemove)
+            {
+                Chart.RemoveObject(name);
+            }
+        }
+
+        private bool IsEMALine(string name)
+        {
+            return name.StartsWith(Ema211Prefix) || name.StartsWith(Ema53Prefix) || name.StartsWith(Ema27Prefix);
         }
 
         private void BuildUI()
@@ -412,7 +454,7 @@ namespace cAlgo.Robots
 
             // Risk Management: Check if total risk exceeds 30% of account balance
             double accountBalance = Account.Balance;
-            double maxRiskAmount = accountBalance * 0.50; // 30% of balance
+            double maxRiskAmount = accountBalance * riskPercent; 
 
             // Calculate existing risk from open positions
             double existingRisk = 0;
