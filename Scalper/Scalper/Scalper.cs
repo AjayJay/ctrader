@@ -59,31 +59,29 @@ public class Scalper : Robot
         PendingOrders.Cancelled -= OnPendingOrderCancelled;
     }
 
+    private static Style CreateButtonStyle(string backgroundHex, string foregroundHex)
+    {
+        var style = new Style(DefaultStyles.ButtonStyle);
+        var background = Color.FromHex(backgroundHex);
+        var foreground = Color.FromHex(foregroundHex);
+
+        foreach (var theme in new[] { ControlState.DarkTheme, ControlState.LightTheme })
+        {
+            style.Set(ControlProperty.BackgroundColor, background, theme);
+            style.Set(ControlProperty.ForegroundColor, foreground, theme);
+            style.Set(ControlProperty.BackgroundColor, background, ControlState.Disabled | theme);
+            style.Set(ControlProperty.ForegroundColor, foreground, ControlState.Disabled | theme);
+        }
+
+        return style;
+    }
+
     private void BuildPanel()
     {
-        _buyUnselectedStyle = new Style(DefaultStyles.ButtonStyle);
-        _buyUnselectedStyle.Set(ControlProperty.BackgroundColor, Color.FromHex("#1B4D22"), ControlState.DarkTheme);
-        _buyUnselectedStyle.Set(ControlProperty.BackgroundColor, Color.FromHex("#1B4D22"), ControlState.LightTheme);
-        _buyUnselectedStyle.Set(ControlProperty.ForegroundColor, Color.FromHex("#CFEFD4"), ControlState.DarkTheme);
-        _buyUnselectedStyle.Set(ControlProperty.ForegroundColor, Color.FromHex("#CFEFD4"), ControlState.LightTheme);
-
-        _buySelectedStyle = new Style(DefaultStyles.ButtonStyle);
-        _buySelectedStyle.Set(ControlProperty.BackgroundColor, Color.FromHex("#2E9E3F"), ControlState.DarkTheme);
-        _buySelectedStyle.Set(ControlProperty.BackgroundColor, Color.FromHex("#2E9E3F"), ControlState.LightTheme);
-        _buySelectedStyle.Set(ControlProperty.ForegroundColor, Color.FromHex("#FFFFFF"), ControlState.DarkTheme);
-        _buySelectedStyle.Set(ControlProperty.ForegroundColor, Color.FromHex("#FFFFFF"), ControlState.LightTheme);
-
-        _sellUnselectedStyle = new Style(DefaultStyles.ButtonStyle);
-        _sellUnselectedStyle.Set(ControlProperty.BackgroundColor, Color.FromHex("#5C1A1A"), ControlState.DarkTheme);
-        _sellUnselectedStyle.Set(ControlProperty.BackgroundColor, Color.FromHex("#5C1A1A"), ControlState.LightTheme);
-        _sellUnselectedStyle.Set(ControlProperty.ForegroundColor, Color.FromHex("#F5CFCF"), ControlState.DarkTheme);
-        _sellUnselectedStyle.Set(ControlProperty.ForegroundColor, Color.FromHex("#F5CFCF"), ControlState.LightTheme);
-
-        _sellSelectedStyle = new Style(DefaultStyles.ButtonStyle);
-        _sellSelectedStyle.Set(ControlProperty.BackgroundColor, Color.FromHex("#D32F2F"), ControlState.DarkTheme);
-        _sellSelectedStyle.Set(ControlProperty.BackgroundColor, Color.FromHex("#D32F2F"), ControlState.LightTheme);
-        _sellSelectedStyle.Set(ControlProperty.ForegroundColor, Color.FromHex("#FFFFFF"), ControlState.DarkTheme);
-        _sellSelectedStyle.Set(ControlProperty.ForegroundColor, Color.FromHex("#FFFFFF"), ControlState.LightTheme);
+        _buyUnselectedStyle = CreateButtonStyle("#1B4D22", "#CFEFD4");
+        _buySelectedStyle = CreateButtonStyle("#2E9E3F", "#FFFFFF");
+        _sellUnselectedStyle = CreateButtonStyle("#5C1A1A", "#F5CFCF");
+        _sellSelectedStyle = CreateButtonStyle("#D32F2F", "#FFFFFF");
 
         var panelBackgroundStyle = new Style();
         panelBackgroundStyle.Set(ControlProperty.CornerRadius, 3);
@@ -374,6 +372,13 @@ public class Scalper : Robot
 
         if (!_isRunning || _selectedDirection == null || HasActiveBotOrder())
             return;
+
+        if (args.Reason == PositionCloseReason.StopLoss)
+        {
+            UpdateStatusText("Stop loss hit. Auto re-entry halted.");
+            OnStopClicked();
+            return;
+        }
 
         if (!TryReadAndValidateInputs(out var lots, out var tpUsd, out var slUsd, out var diffPips, out var waitMinutes, out var error))
         {
