@@ -206,7 +206,7 @@ public class Scalper : Robot
     private TextBox AddLabeledInput(StackPanel parent, string labelText, string defaultValue, Func<string, bool> isValid)
     {
         var stack = new StackPanel();
-        var label = new TextBlock { Text = labelText, Margin = "0 0 0 2" };
+        var label = new TextBlock { Text = labelText, Margin = "0 0 0 2", FontSize = 11 };
         var input = CreateInput(defaultValue, isValid);
 
         stack.AddChild(label);
@@ -218,7 +218,7 @@ public class Scalper : Robot
     private TextBox AddLabeledInputToGrid(Grid grid, int column, string labelText, string defaultValue, Func<string, bool> isValid)
     {
         var stack = new StackPanel();
-        var label = new TextBlock { Text = labelText, Margin = "0 8 0 2", FontSize = 11 };
+        var label = new TextBlock { Text = labelText, Margin = "0 6 0 2", FontSize = 11 };
         var input = CreateInput(defaultValue, isValid);
 
         stack.AddChild(label);
@@ -232,9 +232,9 @@ public class Scalper : Robot
         var input = new TextBox
         {
             Text = defaultValue,
-            Height = 24,
-            ForegroundColor = Color.Black,
-            TextAlignment = TextAlignment.Right
+            Height = 22,
+            FontSize = 11,
+            ForegroundColor = Color.Black
         };
 
         input.TextChanged += args => ApplyValidationColor(input, isValid(input.Text));
