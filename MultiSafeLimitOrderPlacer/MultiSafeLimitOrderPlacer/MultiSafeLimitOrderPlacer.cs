@@ -1,7 +1,5 @@
 using cAlgo.API;
-using cAlgo.API.Indicators;
 using System;
-using System.Collections.Generic;
 
 namespace cAlgo.Robots
 {
@@ -24,132 +22,23 @@ namespace cAlgo.Robots
         private TextBox differenceBox;
 
         private DateTime? lastOrderPlacementTime = null;
-        private const int CooldownMinutes = 3;
-        private const double riskPercent=0.50;
+        private const int CooldownMinutes = 90;
+        private const double riskPercent=0.33;
+        private const string LadderLabel = "LadderUSD";
 
-        private ExponentialMovingAverage ema211;
-        private ExponentialMovingAverage ema53;
-        private ExponentialMovingAverage ema27;
-
-        private const int MaxEMABarsToDraw = 500; // Maximum number of recent bars to draw EMA lines for, to balance performance and historical visibility
-        private const string Ema211Prefix = "EMA211_";
-        private const string Ema53Prefix = "EMA53_";
-        private const string Ema27Prefix = "EMA27_";
+        private EmaChartDrawer emaChartDrawer;
 
         protected override void OnStart()
         {
-            ema211 = Indicators.ExponentialMovingAverage(Bars.ClosePrices, 211);
-            ema53 = Indicators.ExponentialMovingAverage(Bars.ClosePrices, 53);
-            ema27 = Indicators.ExponentialMovingAverage(Bars.ClosePrices, 27);
-
-            // Draw EMA lines immediately on startup if we have enough bars
-            if (Bars.ClosePrices.Count >= 212)
-            {
-                DrawEMALines();
-            }
+            emaChartDrawer = new EmaChartDrawer(Bars, Chart, Indicators);
+            emaChartDrawer.DrawIfReady();
 
             BuildUI();
         }
 
         protected override void OnBar()
         {
-            // Redraw EMA lines on each new bar if we have enough bars
-            if (Bars.ClosePrices.Count >= 212)
-            {
-                DrawEMALines();
-            }
-        }
-
-        private void DrawEMALines()
-        {
-            int startIndex = Math.Max(211, Bars.ClosePrices.Count - MaxEMABarsToDraw);
-            int endIndex = Bars.ClosePrices.Count - 1;
-            var activeLineNames = new HashSet<string>();
-
-            // For EMA211, first valid Result is at index 211
-            for (int i = Math.Max(startIndex, 212); i <= endIndex; i++)
-            {
-                DrawEMASegment(Ema211Prefix, i, ema211, Color.Red, activeLineNames);
-            }
-
-            // For EMA53, first valid Result is at index 53
-            for (int i = Math.Max(startIndex, 54); i <= endIndex; i++)
-            {
-                DrawEMASegment(Ema53Prefix, i, ema53, Color.Blue, activeLineNames);
-            }
-
-            // For EMA27, first valid Result is at index 27
-            for (int i = Math.Max(startIndex, 28); i <= endIndex; i++)
-            {
-                DrawEMASegment(Ema27Prefix, i, ema27, Color.Yellow, activeLineNames);
-            }
-
-            ClearStaleEMALines(activeLineNames);
-        }
-
-        private void DrawEMASegment(string namePrefix, int barIndex, ExponentialMovingAverage ema, Color color, HashSet<string> activeLineNames)
-        {
-            double previousValue = ema.Result[barIndex - 1];
-            double currentValue = ema.Result[barIndex];
-
-            if (double.IsNaN(previousValue) || double.IsNaN(currentValue))
-            {
-                return;
-            }
-
-            string name = $"{namePrefix}{Bars.OpenTimes[barIndex]:yyyyMMddHHmmss}";
-            activeLineNames.Add(name);
-
-            Chart.DrawTrendLine(
-                name,
-                Bars.OpenTimes[barIndex - 1],
-                previousValue,
-                Bars.OpenTimes[barIndex],
-                currentValue,
-                color,
-                3,
-                LineStyle.Solid);
-        }
-
-        private void ClearStaleEMALines(HashSet<string> activeLineNames)
-        {
-            var objectsToRemove = new List<string>();
-
-            foreach (var obj in Chart.Objects)
-            {
-                if (IsEMALine(obj.Name) && !activeLineNames.Contains(obj.Name))
-                {
-                    objectsToRemove.Add(obj.Name);
-                }
-            }
-
-            foreach (var name in objectsToRemove)
-            {
-                Chart.RemoveObject(name);
-            }
-        }
-
-        private void ClearEMALines()
-        {
-            var objectsToRemove = new List<string>();
-
-            foreach (var obj in Chart.Objects)
-            {
-                if (IsEMALine(obj.Name))
-                {
-                    objectsToRemove.Add(obj.Name);
-                }
-            }
-
-            foreach (var name in objectsToRemove)
-            {
-                Chart.RemoveObject(name);
-            }
-        }
-
-        private bool IsEMALine(string name)
-        {
-            return name.StartsWith(Ema211Prefix) || name.StartsWith(Ema53Prefix) || name.StartsWith(Ema27Prefix);
+            emaChartDrawer.DrawIfReady();
         }
 
         private void BuildUI()
@@ -162,9 +51,9 @@ namespace cAlgo.Robots
 
             volumeBox = CreateVolumeComboBox(mainPanel, "Volume (lots)", "0.01");
             slUsdBox = CreateValidatedInput(mainPanel, "Stop Loss (USD)", "10.00", InputType.DecimalPositive);
-            tpUsdBox = CreateValidatedInput(mainPanel, "Take Profit (USD)", "2.00", InputType.DecimalPositive);
+            tpUsdBox = CreateValidatedInput(mainPanel, "Take Profit (USD)", "10.00", InputType.DecimalPositive);
             ordersBox = CreateValidatedInput(mainPanel, "Number of Orders", "1", InputType.IntegerPositive);
-            differenceBox = CreateValidatedInput(mainPanel, "Difference (Pips)", "10.0", InputType.DecimalPositive);
+            differenceBox = CreateValidatedInput(mainPanel, "Difference (Pips)", "1000.0", InputType.DecimalPositive);
 
             buyButton = new Button
             {
@@ -382,8 +271,8 @@ namespace cAlgo.Robots
 
         private void PlaceLadderOrders(TradeType tradeType)
         {
-            // Check cooldown period (15 minutes between order placements)
-            if (lastOrderPlacementTime.HasValue)
+            // Only enforce cooldown while the previous ladder still has active exposure.
+            if (lastOrderPlacementTime.HasValue && HasActiveLadderExposure())
             {
                 TimeSpan timeSinceLastOrder = Server.Time - lastOrderPlacementTime.Value;
                 if (timeSinceLastOrder.TotalMinutes < CooldownMinutes)
@@ -394,6 +283,10 @@ namespace cAlgo.Robots
                     Print($"Next order can be placed after: {lastOrderPlacementTime.Value.AddMinutes(CooldownMinutes):HH:mm:ss}");
                     return;
                 }
+            }
+            else
+            {
+                lastOrderPlacementTime = null;
             }
 
             // Extract volume value from ComboBox (format: "0.02 Lots")
@@ -535,7 +428,7 @@ namespace cAlgo.Robots
                     SymbolName,
                     volumeInUnits,
                     limitPrice,
-                    "LadderUSD",
+                    LadderLabel,
                     slPips,
                     tpPips
                 );
@@ -561,6 +454,27 @@ namespace cAlgo.Robots
                 lastOrderPlacementTime = Server.Time;
                 Print($"Cooldown activated. Next orders can be placed after: {lastOrderPlacementTime.Value.AddMinutes(CooldownMinutes):HH:mm:ss}");
             }
+        }
+
+        private bool HasActiveLadderExposure()
+        {
+            foreach (var position in Positions)
+            {
+                if (position.SymbolName == SymbolName && position.Label == LadderLabel)
+                {
+                    return true;
+                }
+            }
+
+            foreach (var order in PendingOrders)
+            {
+                if (order.SymbolName == SymbolName && order.Label == LadderLabel)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private double MoneyToPips(double money, double volume)

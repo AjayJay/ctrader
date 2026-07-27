@@ -24,14 +24,24 @@ public class Scalper : Robot
     private Style _selectedButtonStyle;
     private Style _unselectedButtonStyle;
 
+    private EmaChartDrawer _emaChartDrawer;
+
     protected override void OnStart()
     {
         BuildPanel();
         Positions.Closed += OnPositionClosed;
+
+        _emaChartDrawer = new EmaChartDrawer(Bars, Chart, Indicators);
+        _emaChartDrawer.DrawIfReady();
     }
 
     protected override void OnTick()
     {
+    }
+
+    protected override void OnBar()
+    {
+        _emaChartDrawer.DrawIfReady();
     }
 
     protected override void OnStop()

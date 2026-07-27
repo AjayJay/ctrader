@@ -6,4 +6,8 @@
   <ItemGroup>
     <PackageReference Include="cTrader.Automate" Version="*" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Shared\EmaChartDrawer.cs" Link="EmaChartDrawer.cs" />
+  </ItemGroup>
 </Project>
