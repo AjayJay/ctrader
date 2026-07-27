@@ -140,12 +140,12 @@ public class Scalper : Robot
         contentPanel.AddChild(directionGrid);
 
         AddSectionLabel(contentPanel, "SIZE & TARGETS");
-        _lotsInput = AddLabeledInput(contentPanel, "Lots", "0.01", IsPositiveDouble);
+        _lotsInput = AddLabeledInput(contentPanel, "Lots", "0.02", IsPositiveDouble);
 
         var targetsGrid = new Grid(1, 3);
         targetsGrid.Columns[1].SetWidthInPixels(6);
-        _tpInput = AddLabeledInputToGrid(targetsGrid, 0, "Take Profit ($)", "10.00", IsPositiveDouble);
-        _slInput = AddLabeledInputToGrid(targetsGrid, 2, "Stop Loss ($)", "10.00", IsPositiveDouble);
+        _tpInput = AddLabeledInputToGrid(targetsGrid, 0, "Take Profit ($)", "2.00", IsPositiveDouble);
+        _slInput = AddLabeledInputToGrid(targetsGrid, 2, "Stop Loss ($)", "20.00", IsPositiveDouble);
         contentPanel.AddChild(targetsGrid);
 
         AddSectionLabel(contentPanel, "ENTRY TIMING");
