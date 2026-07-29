@@ -142,15 +142,15 @@ public class Scalper : Robot
 
         var targetsGrid = new Grid(1, 3);
         targetsGrid.Columns[1].SetWidthInPixels(6);
-        _tpInput = AddLabeledInputToGrid(targetsGrid, 0, "Take Profit ($)", "5.00", IsPositiveDouble);
+        _tpInput = AddLabeledInputToGrid(targetsGrid, 0, "Take Profit ($)", "2.00", IsPositiveDouble);
         _slInput = AddLabeledInputToGrid(targetsGrid, 2, "Stop Loss ($)", "20.00", IsPositiveDouble);
         contentPanel.AddChild(targetsGrid);
 
         AddSectionLabel(contentPanel, "ENTRY TIMING");
         var entryGrid = new Grid(1, 3);
         entryGrid.Columns[1].SetWidthInPixels(6);
-        _diffPipsInput = AddLabeledInputToGrid(entryGrid, 0, "Diff Pips", "1000", IsPositiveDouble);
-        _waitMinutesInput = AddLabeledInputToGrid(entryGrid, 2, "Wait (min)", "5", IsValidWaitMinutes);
+        _diffPipsInput = AddLabeledInputToGrid(entryGrid, 0, "Diff Pips", "4000", IsPositiveDouble);
+        _waitMinutesInput = AddLabeledInputToGrid(entryGrid, 2, "Wait (min)", "3", IsValidWaitMinutes);
         contentPanel.AddChild(entryGrid);
 
         var controlGrid = new Grid(1, 3);
