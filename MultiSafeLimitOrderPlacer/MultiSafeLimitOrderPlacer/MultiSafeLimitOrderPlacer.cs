@@ -14,17 +14,22 @@ namespace cAlgo.Robots
 
         private Button buyButton;
         private Button sellButton;
+        private Button automationButton;
 
         private ComboBox volumeBox;
         private TextBox slUsdBox;
         private TextBox tpUsdBox;
         private TextBox ordersBox;
         private TextBox differenceBox;
+        private TextBox expiryMinutesBox;
 
         private DateTime? lastOrderPlacementTime = null;
-        private const int CooldownMinutes = 90;
-        private const double riskPercent=0.33;
+        private const int CooldownMinutes = 5;
+        private const double riskPercent = 0.90;
         private const string LadderLabel = "LadderUSD";
+
+        private bool isAutomationRunning = false;
+        private TradeType? lastTradeType = null;
 
         private EmaChartDrawer emaChartDrawer;
 
@@ -34,6 +39,15 @@ namespace cAlgo.Robots
             emaChartDrawer.DrawIfReady();
 
             BuildUI();
+
+            Positions.Closed += OnPositionClosed;
+            PendingOrders.Cancelled += OnPendingOrderCancelled;
+        }
+
+        protected override void OnStop()
+        {
+            Positions.Closed -= OnPositionClosed;
+            PendingOrders.Cancelled -= OnPendingOrderCancelled;
         }
 
         protected override void OnBar()
@@ -51,9 +65,10 @@ namespace cAlgo.Robots
 
             volumeBox = CreateVolumeComboBox(mainPanel, "Volume (lots)", "0.01");
             slUsdBox = CreateValidatedInput(mainPanel, "Stop Loss (USD)", "10.00", InputType.DecimalPositive);
-            tpUsdBox = CreateValidatedInput(mainPanel, "Take Profit (USD)", "10.00", InputType.DecimalPositive);
+            tpUsdBox = CreateValidatedInput(mainPanel, "Take Profit (USD)", "0.5", InputType.DecimalPositive);
             ordersBox = CreateValidatedInput(mainPanel, "Number of Orders", "1", InputType.IntegerPositive);
-            differenceBox = CreateValidatedInput(mainPanel, "Difference (Pips)", "1000.0", InputType.DecimalPositive);
+            differenceBox = CreateValidatedInput(mainPanel, "Difference (Pips)", "20.0", InputType.DecimalPositive);
+            expiryMinutesBox = CreateValidatedInput(mainPanel, "Expiry (min)", "3", InputType.IntegerPositive);
 
             buyButton = new Button
             {
@@ -69,12 +84,21 @@ namespace cAlgo.Robots
                 Margin = "0 5 0 0",
                 Height = 30
             };
+            automationButton = new Button
+            {
+                Text = "START AUTOMATION",
+                BackgroundColor = Color.FromArgb(255, 60, 60, 60),
+                Margin = "0 5 0 0",
+                Height = 30
+            };
 
             buyButton.Click += args => PlaceLadderOrders(TradeType.Buy);
             sellButton.Click += args => PlaceLadderOrders(TradeType.Sell);
+            automationButton.Click += args => ToggleAutomation();
 
             mainPanel.AddChild(buyButton);
             mainPanel.AddChild(sellButton);
+            mainPanel.AddChild(automationButton);
 
             var border = new Border
             {
@@ -210,6 +234,10 @@ namespace cAlgo.Robots
                     {
                         isValid = int.TryParse(text, out int orderValue) && orderValue >= 1 && orderValue <= 20;
                     }
+                    else if (textBox == expiryMinutesBox)
+                    {
+                        isValid = int.TryParse(text, out int expiryValue) && expiryValue >= 1 && expiryValue <= 1440;
+                    }
                     else
                     {
                         isValid = int.TryParse(text, out int intValue) && intValue >= 1;
@@ -271,8 +299,9 @@ namespace cAlgo.Robots
 
         private void PlaceLadderOrders(TradeType tradeType)
         {
-            // Only enforce cooldown while the previous ladder still has active exposure.
-            if (lastOrderPlacementTime.HasValue && HasActiveLadderExposure())
+            // Only enforce cooldown while the previous ladder still has unfilled pending orders.
+            // Once orders fill into positions, the risk-cap check governs further placement, not a timer.
+            if (lastOrderPlacementTime.HasValue && HasPendingLadderOrders())
             {
                 TimeSpan timeSinceLastOrder = Server.Time - lastOrderPlacementTime.Value;
                 if (timeSinceLastOrder.TotalMinutes < CooldownMinutes)
@@ -345,9 +374,15 @@ namespace cAlgo.Robots
                 return;
             }
 
+            if (!int.TryParse(expiryMinutesBox.Text, out int expiryMinutes) || expiryMinutes < 1)
+            {
+                Print("Error: Invalid expiry. Please enter a positive number of minutes.");
+                return;
+            }
+
             // Risk Management: Check if total risk exceeds 30% of account balance
             double accountBalance = Account.Balance;
-            double maxRiskAmount = accountBalance * riskPercent; 
+            double maxRiskAmount = accountBalance * riskPercent;
 
             // Calculate existing risk from open positions
             double existingRisk = 0;
@@ -416,6 +451,7 @@ namespace cAlgo.Robots
                 return;
             }
             double currentPrice = tradeType == TradeType.Buy ? Symbol.Ask : Symbol.Bid;
+            var expiration = Server.Time.AddMinutes(expiryMinutes);
 
             // Place limit orders with difference amount spacing
             int successfulOrders = 0;
@@ -430,7 +466,9 @@ namespace cAlgo.Robots
                     limitPrice,
                     LadderLabel,
                     slPips,
-                    tpPips
+                    tpPips,
+                    ProtectionType.Relative,
+                    expiration
                 );
 
                 if (limitResult.IsSuccessful)
@@ -452,8 +490,69 @@ namespace cAlgo.Robots
 
                 // Update cooldown timer
                 lastOrderPlacementTime = Server.Time;
+                lastTradeType = tradeType;
                 Print($"Cooldown activated. Next orders can be placed after: {lastOrderPlacementTime.Value.AddMinutes(CooldownMinutes):HH:mm:ss}");
             }
+        }
+
+        private void ToggleAutomation()
+        {
+            isAutomationRunning = !isAutomationRunning;
+
+            if (isAutomationRunning)
+            {
+                automationButton.Text = "STOP AUTOMATION";
+                automationButton.BackgroundColor = Color.FromArgb(255, 21, 101, 192);
+                Print("Automation started. Ladder will auto re-arm after clearing.");
+            }
+            else
+            {
+                automationButton.Text = "START AUTOMATION";
+                automationButton.BackgroundColor = Color.FromArgb(255, 60, 60, 60);
+                Print("Automation stopped.");
+            }
+        }
+
+        private void HaltAutomation(string reason)
+        {
+            if (!isAutomationRunning)
+                return;
+
+            isAutomationRunning = false;
+            automationButton.Text = "START AUTOMATION";
+            automationButton.BackgroundColor = Color.FromArgb(255, 60, 60, 60);
+            Print($"Automation halted: {reason}");
+        }
+
+        private void OnPositionClosed(PositionClosedEventArgs args)
+        {
+            if (args.Position.SymbolName != SymbolName || args.Position.Label != LadderLabel)
+                return;
+
+            if (args.Reason == PositionCloseReason.StopLoss)
+            {
+                HaltAutomation("Stop loss hit.");
+                return;
+            }
+
+            TryReArmLadder();
+        }
+
+        private void OnPendingOrderCancelled(PendingOrderCancelledEventArgs args)
+        {
+            if (args.PendingOrder.SymbolName != SymbolName || args.PendingOrder.Label != LadderLabel)
+                return;
+
+            TryReArmLadder();
+        }
+
+        private void TryReArmLadder()
+        {
+            if (!isAutomationRunning || !lastTradeType.HasValue || HasActiveLadderExposure())
+                return;
+
+            Print("Ladder exposure cleared. Auto re-arming new ladder.");
+            PlaceLadderOrders(lastTradeType.Value);
         }
 
         private bool HasActiveLadderExposure()
@@ -466,6 +565,11 @@ namespace cAlgo.Robots
                 }
             }
 
+            return HasPendingLadderOrders();
+        }
+
+        private bool HasPendingLadderOrders()
+        {
             foreach (var order in PendingOrders)
             {
                 if (order.SymbolName == SymbolName && order.Label == LadderLabel)
