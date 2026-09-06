@@ -63,9 +63,9 @@ namespace cAlgo.Robots
                 Margin = "10"
             };
 
-            volumeBox = CreateVolumeComboBox(mainPanel, "Volume (lots)", "0.01");
-            slUsdBox = CreateValidatedInput(mainPanel, "Stop Loss (USD)", "10.00", InputType.DecimalPositive);
-            tpUsdBox = CreateValidatedInput(mainPanel, "Take Profit (USD)", "0.5", InputType.DecimalPositive);
+            volumeBox = CreateVolumeComboBox(mainPanel, "Volume (lots)", "0.03");
+            slUsdBox = CreateValidatedInput(mainPanel, "Stop Loss (USD)", "20.00", InputType.DecimalPositive);
+            tpUsdBox = CreateValidatedInput(mainPanel, "Take Profit (USD)", "5", InputType.DecimalPositive);
             ordersBox = CreateValidatedInput(mainPanel, "Number of Orders", "1", InputType.IntegerPositive);
             differenceBox = CreateValidatedInput(mainPanel, "Difference (Pips)", "20.0", InputType.DecimalPositive);
             expiryMinutesBox = CreateValidatedInput(mainPanel, "Expiry (min)", "3", InputType.IntegerPositive);

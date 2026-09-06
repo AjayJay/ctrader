@@ -35,13 +35,13 @@ namespace cAlgo
         [Parameter("Source", Group = "Moving Averages")]
         public DataSeries SourceSeries { get; set; }
 
-        [Parameter("Fast EMA Periods", Group = "Moving Averages", DefaultValue = 2, MinValue = 1)]
+        [Parameter("Fast EMA Periods", Group = "Moving Averages", DefaultValue = 2, MinValue = 1, MaxValue = 20, Step = 1)]
         public int FastPeriods { get; set; }
 
-        [Parameter("Mid EMA Periods", Group = "Moving Averages", DefaultValue = 4, MinValue = 1)]
+        [Parameter("Mid EMA Periods", Group = "Moving Averages", DefaultValue = 4, MinValue = 2, MaxValue = 50, Step = 1)]
         public int MidPeriods { get; set; }
 
-        [Parameter("Slow EMA Periods", Group = "Moving Averages", DefaultValue = 20, MinValue = 1)]
+        [Parameter("Slow EMA Periods", Group = "Moving Averages", DefaultValue = 20, MinValue = 5, MaxValue = 200, Step = 5)]
         public int SlowPeriods { get; set; }
 
         [Parameter("Stop Loss (pips, 0 = off)", Group = "Risk", DefaultValue = 0, MinValue = 0)]
