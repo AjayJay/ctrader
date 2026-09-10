@@ -31,13 +31,13 @@ namespace cAlgo
         [Parameter("Source", Group = "Moving Averages")]
         public DataSeries SourceSeries { get; set; }
 
-        [Parameter("Fast EMA Periods", Group = "Moving Averages", DefaultValue = 9, MinValue = 1, MaxValue = 200, Step = 1)]
+        [Parameter("Fast EMA Periods (prime, 29-100)", Group = "Moving Averages", DefaultValue = 29, MinValue = 29, MaxValue = 100, Step = 1)]
         public int FastPeriods { get; set; }
 
-        [Parameter("Medium EMA Periods", Group = "Moving Averages", DefaultValue = 21, MinValue = 1, MaxValue = 300, Step = 1)]
+        [Parameter("Medium EMA Periods (prime, 50-150)", Group = "Moving Averages", DefaultValue = 53, MinValue = 50, MaxValue = 150, Step = 1)]
         public int MediumPeriods { get; set; }
 
-        [Parameter("Slow EMA Periods", Group = "Moving Averages", DefaultValue = 50, MinValue = 1, MaxValue = 400, Step = 1)]
+        [Parameter("Slow EMA Periods (prime, 200-300)", Group = "Moving Averages", DefaultValue = 211, MinValue = 200, MaxValue = 300, Step = 1)]
         public int SlowPeriods { get; set; }
 
         [Parameter("Confirm With Slow EMA", Group = "Moving Averages", DefaultValue = true)]
@@ -75,8 +75,8 @@ namespace cAlgo
 
             Positions.Closed += OnPositionClosed;
 
-            Print("TripleEmaCrossStrategy started on {0} {1}: fast={2}, medium={3}, slow={4}, confirmWithSlowEma={5}, quantity={6}, sl={7}, tp={8}",
-                SymbolName, TimeFrame, FastPeriods, MediumPeriods, SlowPeriods, ConfirmWithSlowEma, Quantity, StopLossPips, TakeProfitPips);
+            // Print("TripleEmaCrossStrategy started on {0} {1}: fast={2}, medium={3}, slow={4}, confirmWithSlowEma={5}, quantity={6}, sl={7}, tp={8}",
+            //     SymbolName, TimeFrame, FastPeriods, MediumPeriods, SlowPeriods, ConfirmWithSlowEma, Quantity, StopLossPips, TakeProfitPips);
 
             if (MarkSignals)
                 MarkHistoricalSignals();
@@ -105,7 +105,7 @@ namespace cAlgo
                 marked++;
             }
 
-            Print("Marked {0} past signal(s) on the chart.", marked);
+            // Print("Marked {0} past signal(s) on the chart.", marked);
         }
 
         private Signal GetSignal(int index)
@@ -128,8 +128,8 @@ namespace cAlgo
             if (signal == Signal.None)
                 return Signal.None;
 
-            Print("Raw {0} cross on {1} ({2}): fast={3}, medium={4}, slow={5}",
-                signal, Bars.OpenTimes[index], source, _fastMa.Result[index], _mediumMa.Result[index], _slowMa.Result[index]);
+            // Print("Raw {0} cross on {1} ({2}): fast={3}, medium={4}, slow={5}",
+            //     signal, Bars.OpenTimes[index], source, _fastMa.Result[index], _mediumMa.Result[index], _slowMa.Result[index]);
 
             if (!ConfirmWithSlowEma)
                 return signal;
@@ -142,8 +142,8 @@ namespace cAlgo
             if (signal == Signal.Short && !fastAboveSlow)
                 return Signal.Short;
 
-            Print("Filtered out {0} signal from {1} cross: fast={2}, slow={3} does not confirm direction",
-                signal, source, _fastMa.Result[index], _slowMa.Result[index]);
+            // Print("Filtered out {0} signal from {1} cross: fast={2}, slow={3} does not confirm direction",
+            //     signal, source, _fastMa.Result[index], _slowMa.Result[index]);
 
             return Signal.None;
         }
@@ -203,9 +203,9 @@ namespace cAlgo
             if (position.Label != Label || position.SymbolName != SymbolName)
                 return;
 
-            Print("Position closed [{0}]: {1} {2} units, entry={3}, netProfit={4} {5}, pips={6}, reason={7}",
-                position.Id, position.TradeType, position.VolumeInUnits, position.EntryPrice,
-                position.NetProfit, Account.Asset.Name, position.Pips, args.Reason);
+            // Print("Position closed [{0}]: {1} {2} units, entry={3}, netProfit={4} {5}, pips={6}, reason={7}",
+            //     position.Id, position.TradeType, position.VolumeInUnits, position.EntryPrice,
+            //     position.NetProfit, Account.Asset.Name, position.Pips, args.Reason);
         }
 
         protected override void OnBar()
@@ -229,38 +229,38 @@ namespace cAlgo
 
             if (signal == Signal.Long)
             {
-                Print("Long signal on {0}: price={1}, fast={2}, medium={3}, slow={4}",
-                    Bars.OpenTimes[index], Bars.ClosePrices[index], _fastMa.Result[index], _mediumMa.Result[index], _slowMa.Result[index]);
+                // Print("Long signal on {0}: price={1}, fast={2}, medium={3}, slow={4}",
+                //     Bars.OpenTimes[index], Bars.ClosePrices[index], _fastMa.Result[index], _mediumMa.Result[index], _slowMa.Result[index]);
 
                 if (shortPosition != null)
                 {
                     var closeResult = ClosePosition(shortPosition);
-                    Print("Closed short position {0}: success={1}, error={2}", shortPosition.Id, closeResult.IsSuccessful, closeResult.Error);
+                    // Print("Closed short position {0}: success={1}, error={2}", shortPosition.Id, closeResult.IsSuccessful, closeResult.Error);
                 }
 
                 if (longPosition == null)
                 {
                     var openResult = ExecuteMarketOrder(TradeType.Buy, SymbolName, VolumeInUnits, Label, StopLossPips == 0 ? (double?)null : StopLossPips, TakeProfitPips == 0 ? (double?)null : TakeProfitPips);
-                    Print("Opened long: success={0}, error={1}, positionId={2}, volume={3}",
-                        openResult.IsSuccessful, openResult.Error, openResult.Position != null ? openResult.Position.Id.ToString() : "n/a", VolumeInUnits);
+                    // Print("Opened long: success={0}, error={1}, positionId={2}, volume={3}",
+                    //     openResult.IsSuccessful, openResult.Error, openResult.Position != null ? openResult.Position.Id.ToString() : "n/a", VolumeInUnits);
                 }
             }
             else if (signal == Signal.Short)
             {
-                Print("Short signal on {0}: price={1}, fast={2}, medium={3}, slow={4}",
-                    Bars.OpenTimes[index], Bars.ClosePrices[index], _fastMa.Result[index], _mediumMa.Result[index], _slowMa.Result[index]);
+                // Print("Short signal on {0}: price={1}, fast={2}, medium={3}, slow={4}",
+                //     Bars.OpenTimes[index], Bars.ClosePrices[index], _fastMa.Result[index], _mediumMa.Result[index], _slowMa.Result[index]);
 
                 if (longPosition != null)
                 {
                     var closeResult = ClosePosition(longPosition);
-                    Print("Closed long position {0}: success={1}, error={2}", longPosition.Id, closeResult.IsSuccessful, closeResult.Error);
+                    // Print("Closed long position {0}: success={1}, error={2}", longPosition.Id, closeResult.IsSuccessful, closeResult.Error);
                 }
 
                 if (shortPosition == null)
                 {
                     var openResult = ExecuteMarketOrder(TradeType.Sell, SymbolName, VolumeInUnits, Label, StopLossPips == 0 ? (double?)null : StopLossPips, TakeProfitPips == 0 ? (double?)null : TakeProfitPips);
-                    Print("Opened short: success={0}, error={1}, positionId={2}, volume={3}",
-                        openResult.IsSuccessful, openResult.Error, openResult.Position != null ? openResult.Position.Id.ToString() : "n/a", VolumeInUnits);
+                    // Print("Opened short: success={0}, error={1}, positionId={2}, volume={3}",
+                    //     openResult.IsSuccessful, openResult.Error, openResult.Position != null ? openResult.Position.Id.ToString() : "n/a", VolumeInUnits);
                 }
             }
         }
