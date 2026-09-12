@@ -71,7 +71,7 @@ public class EmaLimitOrderStrategy : Robot
     [Parameter("Mark Direction Flips", Group = "Chart", DefaultValue = true)]
     public bool MarkSignals { get; set; }
 
-    private const string Label = "EmaLimitOrderStrategy";
+    private string Label => string.Format("EmaLimitOrderStrategy_{0}", TimeFrame);
 
     private ExponentialMovingAverage _fastMa;
     private ExponentialMovingAverage _slowMa;
